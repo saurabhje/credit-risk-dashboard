@@ -22,3 +22,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+anal/
+
+# Environment variables
+.env
+.env.*
+
+# Node stuff (if using frontend)
+node_modules/
+dist/
+
+# macOS / Linux / Windows system files
+.DS_Store
+Thumbs.db
