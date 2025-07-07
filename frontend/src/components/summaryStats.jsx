@@ -5,7 +5,12 @@ export default function SummaryStats() {
 
   useEffect(() => {
     fetch("/api/summary")
-      .then((res) => res.json())
+        .then((res) => {
+                if (!res.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return res.json();
+            })
       .then(setData)
       .catch((err) => console.error("Failed to load summary", err));
   }, []);

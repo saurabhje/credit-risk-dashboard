@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-
+import { Link } from 'react-router-dom';
 export default function ClientTable() {
     const [clients, setClients] = useState([]);
     const [offset, setOffset] = useState(0);
@@ -38,7 +38,7 @@ export default function ClientTable() {
                                 {client.default === 1 ? 'Yes' : 'No'}
                             </td>
                             <td className='px-4 py-2'>
-                                <button className='text-blue-600 hover:underline'>View</button>
+                                <Link to={`/clients/${client.id}`} className='text-blue-600 hover:underline' >View</Link>
                             </td>
                         </tr>
                     ))}
