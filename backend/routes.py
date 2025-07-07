@@ -1,16 +1,40 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from db import get_db_connection
 
 router = APIRouter()
 
 @router.get("/clients")
-def get_clients():
+def get_clients(
+    limit: int = Query(default=10, ge=1, le=100), 
+    offset: int = Query(default=0, ge=0),
+    defaulted: int | None = Query(None)
+    ):
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM clients LIMIT 10;")
+    
+    base_query = "SELECT * FROM clients";
+    filter = []
+    params = []
+
+    if defaulted is not None:
+        filter.append('"default payment next month" = %s')
+        params.append(defaulted)
+    
+    if filter:
+        base_query += " WHERE " + " AND ".join(filter)
+    
+    base_query += " ORDER BY id LIMIT %s OFFSET %s;"
+    params.extend([limit, offset])
+
+    cursor.execute(base_query, tuple(params))
     rows = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]
     result = [dict(zip(columns, row)) for row in rows]
+    if not result:
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="No clients found")
     cursor.close()
     conn.close()
     return {"clients": result}
@@ -40,9 +64,7 @@ def get_summary():
     cursor.execute("SELECT COUNT(*) FROM clients;")
     total_clients = cursor.fetchone()[0]
 
-    cursor.execute(
-        'SELECT COUNT(*) FROM clients WHERE "default payment next month" = 1;'
-    )
+    cursor.execute('SELECT COUNT(*) FROM clients WHERE "default payment next month" = 1;')
     defaulted_clients = cursor.fetchone()[0]
 
     cursor.execute("SELECT AVG(\"LIMIT_BAL\") FROM clients;")
