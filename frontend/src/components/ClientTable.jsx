@@ -35,7 +35,7 @@ export default function ClientTable() {
                             <td className='px-4 py-2'>₹{client.LIMIT_BAL}</td>
                             <td className='px-4 py-2'>{client.AGE}</td>
                             <td className='px-4 py-2'>
-                                {client.default === 1 ? 'Yes' : 'No'}
+                                {client["default payment next month"] === 1 ? 'Yes' : 'No'}
                             </td>
                             <td className='px-4 py-2'>
                                 <Link to={`/clients/${client.id}`} className='text-blue-600 hover:underline' >View</Link>

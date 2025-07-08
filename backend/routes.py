@@ -82,3 +82,33 @@ def get_summary():
         "avg_limit_balance": int(avg_limit_balance),
         "avg_age": round(avg_age, 1)
     }
+
+@router.get("/summary/education")
+def get_education_default_rate():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT 
+            CASE
+                WHEN "EDUCATION" = 1 THEN 'Graduate'
+                WHEN "EDUCATION" = 2 THEN 'University'
+                WHEN "EDUCATION" = 3 THEN 'High School'
+                ELSE 'Others'
+            END AS education_group,
+            COUNT(*) AS total,
+            SUM(CASE WHEN "default payment next month" = 1 THEN 1 ELSE 0 END) AS defaults
+        FROM clients
+        GROUP BY education_group
+        ORDER BY education_group;
+    """)
+    
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [
+        {
+            "education": row[0],
+            "default_rate": round((row[2] / row[1]) * 100, 2) if row[1] > 0 else 0
+        } for row in rows if row[1] > 0
+    ]
