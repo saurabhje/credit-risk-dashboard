@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 origins = [
     "http://localhost:5173",
-    "https://dashboard.saurabh.codes"
+    "https://credit.saurabh.codes"
 ]
 
 app = FastAPI()
