@@ -1,11 +1,12 @@
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { useEffect, useState } from "react";
 
+const BASE = import.meta.env.VITE_ADDS;
 export default function BarGraph() {
     const [barData, setBarData] = useState([]);
 
     useEffect(() => {
-        fetch("/api/summary/education")
+        fetch(`${BASE}/api/summary/education`)
             .then((res) => res.json())
             .then(setBarData)
             .catch((err) => console.error("Failed to load bar chart data", err))

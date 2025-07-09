@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import DashboardChat from "./pieChart";
 import BarGraph from "./barGraph";
+
+const BASE = import.meta.env.VITE_ADDS;
 export default function SummaryStats() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch("/api/summary")
+    fetch(`${BASE}/api/summary`)
       .then((res) => {
         if (!res.ok) {
           throw new Error('Network response was not ok');

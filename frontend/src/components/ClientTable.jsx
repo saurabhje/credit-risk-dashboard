@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+
+const BASE = import.meta.env.VITE_ADDS;
 export default function ClientTable() {
     const [clients, setClients] = useState([]);
     const [offset, setOffset] = useState(0);
     const limit = 10;
 
     useEffect(() => {
-        fetch(`/api/clients?limit=${limit}&offset=${offset}`)
+        fetch(`${BASE}/api/clients?limit=${limit}&offset=${offset}`)
             .then((res) => res.json())
             .then((data) => setClients(data.clients))
             .catch((error) => console.error('Error fetching clients:', error));

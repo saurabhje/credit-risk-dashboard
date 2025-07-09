@@ -2,12 +2,13 @@ import { useParams, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { formatValue } from '../utils/fieldVals';
 
+const BASE = import.meta.env.VITE_ADDS;
 export default function ClientDetail() {
     const { clientId } = useParams();
     const [client, setClient] = useState(null);
 
     useEffect(() => {
-        fetch(`/api/clients/${clientId}`)
+        fetch(`${BASE}/api/clients/${clientId}`)
             .then((res) => {
                 if (!res.ok) {
                     throw new Error('Network response was not ok');
