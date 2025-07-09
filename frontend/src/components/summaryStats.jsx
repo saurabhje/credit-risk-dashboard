@@ -44,7 +44,7 @@ export default function SummaryStats() {
           <p className="text-xl font-bold">{data.avg_age} yrs</p>
         </div>
       </div>
-      <div className="mt-8 flex flex-col md:flex-row gap-6 bg-white p-6 rounded-xl shadow">
+      <div className="mt-8 flex flex-col md:flex-row gap-12 md:gap-6 bg-white p-6 rounded-xl shadow">
         <DashboardChat defaulted={data.defaulted_clients} total={data.total_clients} />
         <BarGraph />
       </div>

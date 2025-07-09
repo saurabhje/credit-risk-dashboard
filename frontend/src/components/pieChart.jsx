@@ -13,6 +13,7 @@ export default function DashboardChat({ defaulted, total }) {
         <h2 className='text-lg font-semibold mb-4'>Defaulted vs Non-Defaulted Clients</h2>
         <ResponsiveContainer>   
             <PieChart>
+                <Legend verticalAlign="top" align="left" />
                 <Pie
                     data={data}
                     dataKey="value"
@@ -25,7 +26,6 @@ export default function DashboardChat({ defaulted, total }) {
                     ))}
                 </Pie>
             <Tooltip />
-            <Legend />
             </PieChart>
         </ResponsiveContainer>
         </div>
