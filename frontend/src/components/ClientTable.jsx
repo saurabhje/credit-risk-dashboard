@@ -27,7 +27,8 @@ export default function ClientTable() {
                         <th className="px-4 py-2">Credit Limit</th>
                         <th className="px-4 py-2">Age</th>
                         <th className="px-4 py-2">Default?</th>
-                        <th className="px-4 py-2">Action</th>
+                        <th className='px-4 py-2'>Risk</th>
+                        <th className="px-4 py-2">Details</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -38,6 +39,15 @@ export default function ClientTable() {
                             <td className='px-4 py-2'>{client.AGE}</td>
                             <td className='px-4 py-2'>
                                 {client["default payment next month"] === 1 ? 'Yes' : 'No'}
+                            </td>
+                            <td className='px-4 py-2'>
+                                {client.risk_tier == 2 ? (
+                                    <span className='text-red-600 font-semibold'>High</span>
+                                ) : client.risk_tier == 1 ? (
+                                    <span className='text-yellow-600 font-semibold'>Medium</span>
+                                ) : (
+                                    <span className='text-green-600 font-semibold'>Low</span>
+                                )}
                             </td>
                             <td className='px-4 py-2'>
                                 <Link to={`/clients/${client.id}`} className='text-blue-600 hover:underline' >View</Link>

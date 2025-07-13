@@ -7,8 +7,8 @@ router = APIRouter()
 def get_clients(
     limit: int = Query(default=10, ge=1, le=100), 
     offset: int = Query(default=0, ge=0),
-    defaulted: int | None = Query(None)
-    ):
+    defaulted: int | None = Query(None),
+    risk_tier: int | None = Query(None)):
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -20,6 +20,10 @@ def get_clients(
     if defaulted is not None:
         filter.append('"default payment next month" = %s')
         params.append(defaulted)
+
+    if risk_tier is not None:
+        filter.append('risk_tier = %s')
+        params.append(risk_tier)
     
     if filter:
         base_query += " WHERE " + " AND ".join(filter)
@@ -112,3 +116,27 @@ def get_education_default_rate():
             "default_rate": round((row[2] / row[1]) * 100, 2) if row[1] > 0 else 0
         } for row in rows if row[1] > 0
     ]
+
+@router.get("/summary/risk-score")
+def get_risk_score_distribution():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT risk_tier, COUNT(*) 
+        FROM clients 
+        GROUP BY risk_tier 
+        ORDER BY risk_tier;
+    """)
+    
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return [
+        {"risk_tier": row[0], "count": row[1]}
+        for row in rows
+    ]
+
+
+    
