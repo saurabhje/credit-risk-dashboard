@@ -16,9 +16,18 @@ export default function BarGraph() {
         <div className="w-full">
             <h2 className="text-lg font-semibold mb-4">Default Rate by Education</h2>
             <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={barData}>
-                    <XAxis dataKey="education" />
-                    <YAxis unit="% "/>
+                <BarChart
+                    data={barData}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                >
+                    <XAxis
+                        dataKey="education"
+                        interval={0}
+                        angle={-20}
+                        dy={10}
+                    />
+
+                    <YAxis unit="% " />
                     <Tooltip />
                     <Bar dataKey="default_rate" fill="#8884d8" />
                 </BarChart>

@@ -30,10 +30,20 @@ export default function ClientDetail() {
                 {Object.entries(client).map(([key, value]) => (
                     <div key={key} className='p-4 rounded shadow'>
                         <p className='text-gray-500 text-sm'>{key}</p>
-                        <p className='text-lg font-semibold'>{formatValue(key,value)}</p>
+                        {key === 'risk_tier' ? (
+                            <p className={
+                                value === 0 ? 'text-green-600 text-lg font-semibold' :
+                                value === 1 ? 'text-yellow-600 text-lg font-semibold' :
+                                'text-red-600 text-lg font-semibold'
+                            }>
+                                {formatValue(key, value)}
+                            </p>
+                        ) : (
+                            <p className='text-lg font-semibold'>{formatValue(key, value)}</p>
+                        )}
                     </div>
                 ))}
             </div>
         </div>
     )
-}   
+}

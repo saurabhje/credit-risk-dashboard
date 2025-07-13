@@ -29,7 +29,8 @@ export default function RiskGraph () {
                     <YAxis allowDecimals={false} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="count" barSize={50} label={{ position: 'top' }}>
+                    <Bar dataKey="count" barSize={50}>
+                        <LabelList dataKey="count" position="top" fill="#333" />
                         {
                             data.map((entry, index) => (
                                 <Cell 

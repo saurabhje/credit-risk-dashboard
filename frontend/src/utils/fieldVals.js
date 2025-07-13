@@ -36,6 +36,11 @@ export const fieldLabels = {
     "8": "8 Months Delay",
     "9": "9+ Months Delay",
   },
+  risk_tier: {
+    0: "Low",
+    1: "Medium",
+    2: "High",
+  },
 };
 
 export function formatValue(key, value) {
