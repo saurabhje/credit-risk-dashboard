@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import DashboardChat from "./pieChart";
 import BarGraph from "./barGraph";
-
+import RiskGraph from "./riskGraph";
 const BASE = import.meta.env.VITE_ADDS;
 export default function SummaryStats() {
   const [data, setData] = useState(null);
@@ -44,10 +44,18 @@ export default function SummaryStats() {
           <p className="text-xl font-bold">{data.avg_age} yrs</p>
         </div>
       </div>
-      <div className="mt-8 flex flex-col md:flex-row gap-12 md:gap-6 bg-white p-6 rounded-xl shadow">
-        <DashboardChat defaulted={data.defaulted_clients} total={data.total_clients} />
-        <BarGraph />
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="bg-white p-4 rounded-xl shadow">
+          <DashboardChat defaulted={data.defaulted_clients} total={data.total_clients} />
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow">
+          <BarGraph />
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow">
+          <RiskGraph />
+        </div>
       </div>
+
     </div>
   );
 }
