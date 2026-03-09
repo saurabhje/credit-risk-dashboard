@@ -60,7 +60,7 @@ def predict_all():
     scaled = scaler.transform(df[feature_cols])
     df["risk_score"] = model.predict_proba(scaled)[:, 1].round(2)
     df["risk_label"] = df["risk_score"].apply(
-    lambda x: "Low" if x < 0.25 else "Moderate" if x < 0.50 else "High" if x < 0.75 else "Very High"
+    lambda x: "Low" if x < 0.25 else "Moderate" if x < 0.50 else "High" if x < 0.75 else "Critical"
 )    
     try:
         data = list(zip(df["risk_score"], df["risk_label"], df["id"]))
@@ -70,9 +70,7 @@ def predict_all():
             data,
             page_size=1000
         )
-        print("executemany done")
         conn.commit()
-        print("committed")
     except Exception as e:
         print("ERROR:", e)
         conn.rollback()
@@ -90,7 +88,7 @@ def get_clients(
     limit: int = Query(default=10, ge=1, le=100), 
     offset: int = Query(default=0, ge=0),
     defaulted: int | None = Query(None),
-    risk_tier: int | None = Query(None)):
+    risk_label: str | None = Query(None)):
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -103,9 +101,9 @@ def get_clients(
         filter.append('"default payment next month" = %s')
         params.append(defaulted)
 
-    if risk_tier is not None:
-        filter.append('risk_tier = %s')
-        params.append(risk_tier)
+    if risk_label is not None:
+        filter.append('risk_label = %s')
+        params.append(risk_label)
     
     if filter:
         base_query += " WHERE " + " AND ".join(filter)
@@ -207,16 +205,15 @@ def get_risk_score_distribution():
     cursor.execute("""
         SELECT risk_label, COUNT(*) 
         FROM clients 
-        GROUP BY label
+        GROUP BY risk_label
         ORDER BY risk_label;
     """)
     
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
-
     return [
-        {"risk_tier": row[0], "count": row[1]}
+        {"risk_label": row[0], "count": row[1]}
         for row in rows
     ]
 
