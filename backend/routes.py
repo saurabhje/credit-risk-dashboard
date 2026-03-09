@@ -1,7 +1,89 @@
 from fastapi import APIRouter, HTTPException, Query
 from db import get_db_connection
+import joblib
+import numpy as np
+import pandas as pd
+from schema import CreditInput
+from psycopg2.extras import execute_batch
 
 router = APIRouter()
+
+
+scaler = joblib.load("scaler.pkl")
+model = joblib.load("credit_risk_model.pkl")
+
+@router.post("/predict")
+def predict(data: CreditInput):
+    avg_utilization = np.mean([data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6]) / (data.LIMIT_BAL + 1)
+    max_utilization = max([data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6]) / (data.LIMIT_BAL + 1)
+    payment_ratio = data.PAY_AMT1 / (data.BILL_AMT1 + 1)
+    features = [[
+        data.LIMIT_BAL, data.SEX, data.EDUCATION, data.MARRIAGE, data.AGE,
+        data.PAY_0, data.PAY_2, data.PAY_3, data.PAY_4, data.PAY_5, data.PAY_6,
+        data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6,
+        data.PAY_AMT1, data.PAY_AMT2, data.PAY_AMT3, data.PAY_AMT4, data.PAY_AMT5, data.PAY_AMT6,
+        avg_utilization, max_utilization, payment_ratio
+    ]]
+    
+    scaled_features = scaler.transform(features)
+    prediction = model.predict(scaled_features)[0]
+    probability = model.predict_proba(scaled_features)[0][1]
+    
+    return {
+        "risk_label": "High Risk" if prediction == 1 else "Low Risk",
+        "risk_score": round(float(probability), 2)
+    }
+
+@router.get("/predict/all")
+def predict_all():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM clients;")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+
+    df = pd.DataFrame(rows, columns=columns)
+    df = df.drop(columns=["risk_score", "risk_label"])
+    df["avg_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].mean(axis=1) / (df["LIMIT_BAL"] + 1)
+    df["max_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].max(axis=1) / (df["LIMIT_BAL"] + 1)
+    df["payment_ratio"] = df["PAY_AMT1"] / (df["BILL_AMT1"] + 1)
+    df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    feature_cols = [
+        "LIMIT_BAL", "SEX", "EDUCATION", "MARRIAGE", "AGE",
+        "PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6",
+        "BILL_AMT1", "BILL_AMT2", "BILL_AMT3", "BILL_AMT4", "BILL_AMT5", "BILL_AMT6",
+        "PAY_AMT1", "PAY_AMT2", "PAY_AMT3", "PAY_AMT4", "PAY_AMT5", "PAY_AMT6",
+        "avg_utilization", "max_utilization", "payment_ratio"
+    ]
+
+    scaled = scaler.transform(df[feature_cols])
+    df["risk_score"] = model.predict_proba(scaled)[:, 1].round(2)
+    df["risk_label"] = df["risk_score"].apply(
+    lambda x: "Low" if x < 0.25 else "Moderate" if x < 0.50 else "High" if x < 0.75 else "Very High"
+)    
+    try:
+        data = list(zip(df["risk_score"], df["risk_label"], df["id"]))
+        execute_batch(
+            cursor,
+            "UPDATE clients SET risk_score = %s, risk_label = %s where id = %s;",
+            data,
+            page_size=1000
+        )
+        print("executemany done")
+        conn.commit()
+        print("committed")
+    except Exception as e:
+        print("ERROR:", e)
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+    return {"message": f"Predictions saved for {len(df)} clients"}
+
+
+
 
 @router.get("/clients")
 def get_clients(
@@ -123,10 +205,10 @@ def get_risk_score_distribution():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT risk_tier, COUNT(*) 
+        SELECT risk_label, COUNT(*) 
         FROM clients 
-        GROUP BY risk_tier 
-        ORDER BY risk_tier;
+        GROUP BY label
+        ORDER BY risk_label;
     """)
     
     rows = cursor.fetchall()
