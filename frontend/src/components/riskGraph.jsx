@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, LabelList, Cell  } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, LabelList, Cell } from "recharts";
 const BASE = import.meta.env.VITE_ADDS;
-const RISK_LABELS = ["Low", "Medium", "High"];
 
-export default function RiskGraph () {
+export default function RiskGraph() {
     const [data, setData] = useState([]);
 
     useEffect(() => {
         fetch(`${BASE}/api/summary/risk-score`)
             .then((res) => res.json())
             .then((raw) => {
+                console.log(Object.keys(raw[0]))
                 const transformed = raw.map((item) => ({
-                    name: RISK_LABELS[item.risk_tier] || `Tier ${item.risk_tier}`,
+                    name: item.risk_label,
                     count: item.count,
                 }));
                 setData(transformed);
@@ -33,9 +33,14 @@ export default function RiskGraph () {
                         <LabelList dataKey="count" position="top" fill="#333" />
                         {
                             data.map((entry, index) => (
-                                <Cell 
+                                <Cell
                                     key={index}
-                                    fill={entry.name === "High" ? "#a90000ff" : entry.name === "Medium" ? "#d68b01ff" : "#02c202ff" }
+                                    fill={
+                                        entry.name === "Critical" ? "#8b0000" :
+                                            entry.name === "High" ? "#ef4444" :
+                                                entry.name === "Moderate" ? "#d68b01" :
+                                                    "#02c202"
+                                    }
                                 />
                             ))
                         }

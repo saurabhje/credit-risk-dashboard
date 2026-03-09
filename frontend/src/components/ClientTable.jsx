@@ -41,13 +41,14 @@ export default function ClientTable() {
                                 {client["default payment next month"] === 1 ? 'Yes' : 'No'}
                             </td>
                             <td className='px-4 py-2'>
-                                {client.risk_tier == 2 ? (
+                                {client.risk_label == "High" ? (
                                     <span className='text-red-600 font-semibold'>High</span>
-                                ) : client.risk_tier == 1 ? (
+                                ) : client.risk_label == "Moderate" ? (
                                     <span className='text-yellow-600 font-semibold'>Medium</span>
-                                ) : (
+                                ) : client.risk_label == "Low" ?(
                                     <span className='text-green-600 font-semibold'>Low</span>
-                                )}
+                                ) : (<span className='text-red-700 font-semibold'>Critical</span>)
+                                }
                             </td>
                             <td className='px-4 py-2'>
                                 <Link to={`/clients/${client.id}`} className='text-blue-600 hover:underline' >View</Link>
