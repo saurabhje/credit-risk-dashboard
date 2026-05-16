@@ -1,36 +1,39 @@
 import pandas as pd
+import numpy as np
 import sqlite3
+import joblib
 import os
+from fastapi import APIRouter, HTTPException, Query
+from schema import CreditInput
+from db import get_db_connection
 
-def init_db(csv_path="UCI_Credit_Card.csv"):
-    if not os.path.exists(csv_path):
-        print(f"Error: {csv_path} not found. Please place the CSV file in the backend directory.")
-        return
+router = APIRouter()
 
-    print(f"Loading data from {csv_path}...")
-    df = pd.read_csv(csv_path)
-    
-    if 'ID' in df.columns:
-        df.rename(columns={'ID': 'id'}, inplace=True)
-    
-    if 'risk_score' not in df.columns:
-        df['risk_score'] = 0.0
-    if 'risk_label' not in df.columns:
-        df['risk_label'] = 'Pending'
+# Load model and scaler
+MODEL_PATH = "credit_risk_model.pkl"
+SCALER_PATH = "scaler.pkl"
 
-    conn = sqlite3.connect("credit_risk.db")
-    
-    print("Writing to SQLite database (credit_risk.db)...")
-    df.columns = [c.replace('"', '').replace("'", "") for c in df.columns]
-    
-    df.to_sql("clients", conn, if_exists="replace", index=False)
-    
-    conn.close()
-    print("Database initialized successfully!")
+if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+    model = joblib.load(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+else:
+    model = None
+    scaler = None
+    print("Warning: Model or Scaler not found. Prediction endpoints will fail.")
 
-if __name__ == "__main__":
-    init_db()
-LL_AMT5, data.BILL_AMT6,
+@router.post("/predict")
+def predict(data: CreditInput):
+    if model is None or scaler is None:
+        raise HTTPException(status_code=500, detail="Model not loaded")
+    
+    avg_utilization = (data.BILL_AMT1 + data.BILL_AMT2 + data.BILL_AMT3 + data.BILL_AMT4 + data.BILL_AMT5 + data.BILL_AMT6) / (6 * (data.LIMIT_BAL + 1))
+    max_utilization = max(data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6) / (data.LIMIT_BAL + 1)
+    payment_ratio = data.PAY_AMT1 / (data.BILL_AMT1 + 1)
+
+    features = [[
+        data.LIMIT_BAL, data.SEX, data.EDUCATION, data.MARRIAGE, data.AGE,
+        data.PAY_0, data.PAY_2, data.PAY_3, data.PAY_4, data.PAY_5, data.PAY_6,
+        data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6,
         data.PAY_AMT1, data.PAY_AMT2, data.PAY_AMT3, data.PAY_AMT4, data.PAY_AMT5, data.PAY_AMT6,
         avg_utilization, max_utilization, payment_ratio
     ]]
@@ -46,18 +49,23 @@ LL_AMT5, data.BILL_AMT6,
 
 @router.get("/predict/all")
 def predict_all():
+    if model is None or scaler is None:
+        raise HTTPException(status_code=500, detail="Model not loaded")
+        
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM clients;")
     rows = cursor.fetchall()
     
     if not rows:
+        conn.close()
         return {"message": "No clients found to predict"}
     
     columns = rows[0].keys()
 
     df = pd.DataFrame([dict(row) for row in rows], columns=columns)
     df = df.drop(columns=["risk_score", "risk_label"])
+    
     df["avg_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].mean(axis=1) / (df["LIMIT_BAL"] + 1)
     df["max_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].max(axis=1) / (df["LIMIT_BAL"] + 1)
     df["payment_ratio"] = df["PAY_AMT1"] / (df["BILL_AMT1"] + 1)
@@ -74,13 +82,13 @@ def predict_all():
     scaled = scaler.transform(df[feature_cols])
     df["risk_score"] = model.predict_proba(scaled)[:, 1].round(2)
     df["risk_label"] = df["risk_score"].apply(
-    lambda x: "Low" if x < 0.25 else "Moderate" if x < 0.50 else "High" if x < 0.75 else "Critical"
-)    
+        lambda x: "Low" if x < 0.25 else "Moderate" if x < 0.50 else "High" if x < 0.75 else "Critical"
+    )    
     try:
-        data = list(zip(df["risk_score"], df["risk_label"], df["id"]))
+        data_to_update = list(zip(df["risk_score"], df["risk_label"], df["id"]))
         cursor.executemany(
             "UPDATE clients SET risk_score = ?, risk_label = ? where id = ?;",
-            data
+            data_to_update
         )
         conn.commit()
     except Exception as e:
@@ -102,20 +110,20 @@ def get_clients(
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    base_query = "SELECT * FROM clients";
-    filter = []
+    base_query = "SELECT * FROM clients"
+    filters = []
     params = []
 
     if defaulted is not None:
-        filter.append("`default payment next month` = ?")
+        filters.append('"`default.payment.next.month`" = ?')
         params.append(defaulted)
 
     if risk_label is not None:
-        filter.append('risk_label = ?')
+        filters.append('risk_label = ?')
         params.append(risk_label)
     
-    if filter:
-        base_query += " WHERE " + " AND ".join(filter)
+    if filters:
+        base_query += " WHERE " + " AND ".join(filters)
     
     base_query += " ORDER BY id LIMIT ? OFFSET ?;"
     params.extend([limit, offset])
@@ -124,12 +132,12 @@ def get_clients(
     rows = cursor.fetchall()
     result = [dict(row) for row in rows]
     
-    if not result:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="No clients found")
     cursor.close()
     conn.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="No clients found")
+    
     return {"clients": result}
 
 @router.get("/clients/{client_id}")
@@ -138,14 +146,13 @@ def get_client(client_id: int):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM clients WHERE id = ?;", (client_id,))
     row = cursor.fetchone()
-    if row is None:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="Client not found")
-    result = dict(row)
     cursor.close()
     conn.close()
-    return result
+    
+    if row is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    return dict(row)
 
 @router.get("/summary")
 def get_summary():
@@ -155,7 +162,7 @@ def get_summary():
     cursor.execute("SELECT COUNT(*) FROM clients;")
     total_clients = cursor.fetchone()[0]
 
-    cursor.execute('SELECT COUNT(*) FROM clients WHERE `default payment next month` = 1;')
+    cursor.execute('SELECT COUNT(*) FROM clients WHERE "default.payment.next.month" = 1;')
     defaulted_clients = cursor.fetchone()[0]
 
     cursor.execute("SELECT AVG(LIMIT_BAL) FROM clients;")
@@ -166,6 +173,7 @@ def get_summary():
 
     cursor.close()
     conn.close()
+    
     return {
         "total_clients": total_clients,
         "defaulted_clients": defaulted_clients,
@@ -188,7 +196,7 @@ def get_education_default_rate():
                 ELSE 'Others'
             END AS education_group,
             COUNT(*) AS total,
-            SUM(CASE WHEN `default payment next month` = 1 THEN 1 ELSE 0 END) AS defaults
+            SUM(CASE WHEN "default.payment.next.month" = 1 THEN 1 ELSE 0 END) AS defaults
         FROM clients
         GROUP BY education_group
         ORDER BY education_group;
@@ -197,6 +205,7 @@ def get_education_default_rate():
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
+    
     return [
         {
             "education": row[0],
@@ -219,6 +228,7 @@ def get_risk_score_distribution():
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
+    
     return [
         {"risk_label": row[0], "count": row[1]}
         for row in rows
