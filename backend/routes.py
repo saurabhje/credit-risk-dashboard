@@ -1,26 +1,36 @@
-from fastapi import APIRouter, HTTPException, Query
-from db import get_db_connection
-import joblib
-import numpy as np
 import pandas as pd
-from schema import CreditInput
-from psycopg2.extras import execute_batch
+import sqlite3
+import os
 
-router = APIRouter()
+def init_db(csv_path="UCI_Credit_Card.csv"):
+    if not os.path.exists(csv_path):
+        print(f"Error: {csv_path} not found. Please place the CSV file in the backend directory.")
+        return
 
+    print(f"Loading data from {csv_path}...")
+    df = pd.read_csv(csv_path)
+    
+    if 'ID' in df.columns:
+        df.rename(columns={'ID': 'id'}, inplace=True)
+    
+    if 'risk_score' not in df.columns:
+        df['risk_score'] = 0.0
+    if 'risk_label' not in df.columns:
+        df['risk_label'] = 'Pending'
 
-scaler = joblib.load("scaler.pkl")
-model = joblib.load("credit_risk_model.pkl")
+    conn = sqlite3.connect("credit_risk.db")
+    
+    print("Writing to SQLite database (credit_risk.db)...")
+    df.columns = [c.replace('"', '').replace("'", "") for c in df.columns]
+    
+    df.to_sql("clients", conn, if_exists="replace", index=False)
+    
+    conn.close()
+    print("Database initialized successfully!")
 
-@router.post("/predict")
-def predict(data: CreditInput):
-    avg_utilization = np.mean([data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6]) / (data.LIMIT_BAL + 1)
-    max_utilization = max([data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6]) / (data.LIMIT_BAL + 1)
-    payment_ratio = data.PAY_AMT1 / (data.BILL_AMT1 + 1)
-    features = [[
-        data.LIMIT_BAL, data.SEX, data.EDUCATION, data.MARRIAGE, data.AGE,
-        data.PAY_0, data.PAY_2, data.PAY_3, data.PAY_4, data.PAY_5, data.PAY_6,
-        data.BILL_AMT1, data.BILL_AMT2, data.BILL_AMT3, data.BILL_AMT4, data.BILL_AMT5, data.BILL_AMT6,
+if __name__ == "__main__":
+    init_db()
+LL_AMT5, data.BILL_AMT6,
         data.PAY_AMT1, data.PAY_AMT2, data.PAY_AMT3, data.PAY_AMT4, data.PAY_AMT5, data.PAY_AMT6,
         avg_utilization, max_utilization, payment_ratio
     ]]
@@ -40,9 +50,13 @@ def predict_all():
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM clients;")
     rows = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
+    
+    if not rows:
+        return {"message": "No clients found to predict"}
+    
+    columns = rows[0].keys()
 
-    df = pd.DataFrame(rows, columns=columns)
+    df = pd.DataFrame([dict(row) for row in rows], columns=columns)
     df = df.drop(columns=["risk_score", "risk_label"])
     df["avg_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].mean(axis=1) / (df["LIMIT_BAL"] + 1)
     df["max_utilization"] = df[["BILL_AMT1","BILL_AMT2","BILL_AMT3","BILL_AMT4","BILL_AMT5","BILL_AMT6"]].max(axis=1) / (df["LIMIT_BAL"] + 1)
@@ -64,11 +78,9 @@ def predict_all():
 )    
     try:
         data = list(zip(df["risk_score"], df["risk_label"], df["id"]))
-        execute_batch(
-            cursor,
-            "UPDATE clients SET risk_score = %s, risk_label = %s where id = %s;",
-            data,
-            page_size=1000
+        cursor.executemany(
+            "UPDATE clients SET risk_score = ?, risk_label = ? where id = ?;",
+            data
         )
         conn.commit()
     except Exception as e:
@@ -79,9 +91,6 @@ def predict_all():
         cursor.close()
         conn.close()
     return {"message": f"Predictions saved for {len(df)} clients"}
-
-
-
 
 @router.get("/clients")
 def get_clients(
@@ -98,23 +107,23 @@ def get_clients(
     params = []
 
     if defaulted is not None:
-        filter.append('"default payment next month" = %s')
+        filter.append("`default payment next month` = ?")
         params.append(defaulted)
 
     if risk_label is not None:
-        filter.append('risk_label = %s')
+        filter.append('risk_label = ?')
         params.append(risk_label)
     
     if filter:
         base_query += " WHERE " + " AND ".join(filter)
     
-    base_query += " ORDER BY id LIMIT %s OFFSET %s;"
+    base_query += " ORDER BY id LIMIT ? OFFSET ?;"
     params.extend([limit, offset])
 
     cursor.execute(base_query, tuple(params))
     rows = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
-    result = [dict(zip(columns, row)) for row in rows]
+    result = [dict(row) for row in rows]
+    
     if not result:
         cursor.close()
         conn.close()
@@ -127,18 +136,16 @@ def get_clients(
 def get_client(client_id: int): 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM clients WHERE id = %s;", (client_id,))
+    cursor.execute("SELECT * FROM clients WHERE id = ?;", (client_id,))
     row = cursor.fetchone()
     if row is None:
         cursor.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Client not found")
-    columns = [desc[0] for desc in cursor.description]
-    result = dict(zip(columns, row))
+    result = dict(row)
     cursor.close()
     conn.close()
     return result
-
 
 @router.get("/summary")
 def get_summary():
@@ -148,13 +155,13 @@ def get_summary():
     cursor.execute("SELECT COUNT(*) FROM clients;")
     total_clients = cursor.fetchone()[0]
 
-    cursor.execute('SELECT COUNT(*) FROM clients WHERE "default payment next month" = 1;')
+    cursor.execute('SELECT COUNT(*) FROM clients WHERE `default payment next month` = 1;')
     defaulted_clients = cursor.fetchone()[0]
 
-    cursor.execute("SELECT AVG(\"LIMIT_BAL\") FROM clients;")
+    cursor.execute("SELECT AVG(LIMIT_BAL) FROM clients;")
     avg_limit_balance = cursor.fetchone()[0]
 
-    cursor.execute("SELECT AVG(\"AGE\") FROM clients;")
+    cursor.execute("SELECT AVG(AGE) FROM clients;")
     avg_age = cursor.fetchone()[0]
 
     cursor.close()
@@ -162,9 +169,9 @@ def get_summary():
     return {
         "total_clients": total_clients,
         "defaulted_clients": defaulted_clients,
-        "default_rate_percent": round((defaulted_clients / total_clients) * 100, 2),
-        "avg_limit_balance": int(avg_limit_balance),
-        "avg_age": round(avg_age, 1)
+        "default_rate_percent": round((defaulted_clients / total_clients) * 100, 2) if total_clients > 0 else 0,
+        "avg_limit_balance": int(avg_limit_balance) if avg_limit_balance else 0,
+        "avg_age": round(avg_age, 1) if avg_age else 0
     }
 
 @router.get("/summary/education")
@@ -175,13 +182,13 @@ def get_education_default_rate():
     cursor.execute("""
         SELECT 
             CASE
-                WHEN "EDUCATION" = 1 THEN 'Graduate'
-                WHEN "EDUCATION" = 2 THEN 'University'
-                WHEN "EDUCATION" = 3 THEN 'High School'
+                WHEN EDUCATION = 1 THEN 'Graduate'
+                WHEN EDUCATION = 2 THEN 'University'
+                WHEN EDUCATION = 3 THEN 'High School'
                 ELSE 'Others'
             END AS education_group,
             COUNT(*) AS total,
-            SUM(CASE WHEN "default payment next month" = 1 THEN 1 ELSE 0 END) AS defaults
+            SUM(CASE WHEN `default payment next month` = 1 THEN 1 ELSE 0 END) AS defaults
         FROM clients
         GROUP BY education_group
         ORDER BY education_group;
@@ -216,6 +223,3 @@ def get_risk_score_distribution():
         {"risk_label": row[0], "count": row[1]}
         for row in rows
     ]
-
-
-    
